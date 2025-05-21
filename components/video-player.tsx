@@ -9,8 +9,8 @@ import { Ban, Volume2, VolumeX, Pause, Play } from "lucide-react";
 import { checkToken, TokenCheckResult } from "@/lib/actions";
 
 interface VideoPlayerProps {
-    token: string;
-    username: string;
+  token: string;
+  username: string;
 }
 
 const DEFAULT_VIETNAM_IP = "203.113.131.5";
@@ -34,11 +34,10 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
   const router = useRouter();
   const pathname = usePathname();
 
-    useEffect(() => {
-        setUserMode(username ? "Legitimate" : "Pirate");
-    }, [username]);
+  useEffect(() => {
+    setUserMode(username ? "Legitimate" : "Pirate");
+  }, [username]);
 
-  // Effect to initialize IP from URL or set default and update URL
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
     const ipFromQuery = params.get("ip");
@@ -83,7 +82,6 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
     }
   }, [token]);
 
-  // Token validation effect
   useEffect(() => {
     if (!token) {
       setIsTokenValid(false);
@@ -118,8 +116,8 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
         const result: TokenCheckResult = await checkToken(payloadForApi);
         if (!isActive) return;
 
-                setIsTokenValid(result.isValid);
-                setApiResponseMessage(result.message);
+        setIsTokenValid(result.isValid);
+        setApiResponseMessage(result.message);
 
         if (!result.isValid) {
           if (videoRef.current && !videoRef.current.paused) {
@@ -151,6 +149,7 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
     };
   }, [token, currentIp]); // Re-run if token or currentIp (from URL) changes
 
+  // Video event handlers
   const handlePlay = async () => {
     if (videoRef.current && isTokenValid) {
       try {
@@ -163,7 +162,7 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
         }
       } catch (error) {
         console.error("Error toggling video playback:", error);
-        setIsPlaying(videoRef.current?.paused ? false : true);
+        setIsPlaying(videoRef.current?.paused ? false : true); // Sync with actual state
       }
     }
   };
@@ -181,28 +180,28 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
     }
   };
 
-    const handleMute = () => {
-        if (videoRef.current) {
-            videoRef.current.muted = !isMuted;
-            setIsMuted(!isMuted);
-        }
-    };
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+    }
+  };
 
-    const handleTimeUpdate = () => {
-        if (videoRef.current) {
-            setCurrentTime(videoRef.current.currentTime);
-        }
-    };
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+  };
 
-    const handleLoadedMetadata = () => {
-        if (videoRef.current) {
-            setDuration(videoRef.current.duration);
-        }
-    };
+  const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (videoRef.current && isTokenValid) {
+      const newTime = Number.parseFloat(e.target.value);
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      {/* Informational message displaying the IP being used */}
       <div
         className={`p-3 mb-2 rounded-md text-sm flex items-center ${
           isTokenValid
@@ -213,14 +212,19 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
         <span>Validating with IP: {currentIp || "Loading IP..."}</span>
       </div>
 
-    const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (videoRef.current && isTokenValid) {
-            const newTime = Number.parseFloat(e.target.value);
-            videoRef.current.currentTime = newTime;
-            setCurrentTime(newTime);
-        }
-    };
+      <Card className="w-full bg-gray-900 border-gray-800 overflow-hidden relative">
+        <CardContent className="p-0">
+          <div className="relative">
+            <video
+              ref={videoRef}
+              className="w-full aspect-video bg-black"
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+            />
 
+            {/* Token invalid overlay (replaces "banned" overlay) */}
             {!isTokenValid && (
               <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
                 <div className="w-[80%] max-w-md bg-red-800/60 p-6 flex flex-col items-center justify-center rounded-lg text-center shadow-xl">
@@ -236,8 +240,10 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
                     Please ensure you have a valid session or contact support.
                   </p>
                 </div>
+              </div>
             )}
 
+            {/* User mode indicator */}
             <div className="absolute top-4 left-4 bg-gray-800/80 px-3 py-1 rounded-md text-sm z-[5]">
               <span
                 className={
@@ -251,6 +257,7 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
               )}
             </div>
 
+            {/* Video controls */}
             <div
               className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300 ${
                 !isTokenValid ? "opacity-50 pointer-events-none" : "opacity-100"
@@ -291,6 +298,7 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
                     size="icon"
                     variant="ghost"
                     onClick={handleMute}
+                    disabled={!isTokenValid} // Mute can be independent or also disabled
                     className="text-white hover:bg-gray-800/50"
                     aria-label={isMuted ? "Unmute" : "Mute"}
                   >

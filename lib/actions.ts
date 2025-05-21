@@ -39,8 +39,8 @@ interface CheckTokenPayload {
 // Define a new interface for the return type
 export interface TokenCheckResult {
     isValid: boolean;
-    message: string; // We'll always include a message now
-    // status?: number; // Optionally include the status code from the JSON body
+    message: string; 
+  
 }
 
 export async function checkToken(
@@ -51,8 +51,8 @@ export async function checkToken(
             "Sending to /CheckToken:",
             JSON.stringify(payload, null, 2)
         );
-        const HARPER_DB_USERNAME = "HDB_ADMIN";
-        const HARPER_DB_PASSWORD = "son123456";
+        const HARPER_DB_USERNAME = "123123";
+        const HARPER_DB_PASSWORD = "123123";
         const auth = Buffer.from(
             `${HARPER_DB_USERNAME}:${HARPER_DB_PASSWORD}`
         ).toString("base64");
@@ -130,3 +130,4 @@ export async function checkToken(
         };
     }
 }
+ 
