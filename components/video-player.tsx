@@ -1,17 +1,19 @@
 "use client";
 
 import type React from "react";
-
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Ban, Volume2, VolumeX, Pause, Play } from "lucide-react";
 import { checkToken, TokenCheckResult } from "@/lib/actions";
 
 interface VideoPlayerProps {
-  token: string;
-  username: string;
+    token: string;
+    username: string;
 }
+
+const DEFAULT_VIETNAM_IP = "203.113.131.5";
 
 export function VideoPlayer({ token, username }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -26,10 +28,51 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
   const [userMode, setUserMode] = useState<"Legitimate" | "Pirate">(
     "Legitimate"
   );
+  const [currentIp, setCurrentIp] = useState<string>(DEFAULT_VIETNAM_IP);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+    useEffect(() => {
+        setUserMode(username ? "Legitimate" : "Pirate");
+    }, [username]);
+
+  // Effect to initialize IP from URL or set default and update URL
   useEffect(() => {
-    setUserMode(username ? "Legitimate" : "Pirate");
-  }, [username]);
+    const params = new URLSearchParams(searchParams.toString());
+    const ipFromQuery = params.get("ip");
+
+    let ipToSet = DEFAULT_VIETNAM_IP;
+    let shouldUpdateUrl = false;
+
+    if (ipFromQuery) {
+      ipToSet = ipFromQuery;
+    } else {
+      shouldUpdateUrl = true; // IP not in URL, will add default
+    }
+
+    if (currentIp !== ipToSet) {
+      setCurrentIp(ipToSet);
+    }
+
+    if (shouldUpdateUrl) {
+      params.set("ip", DEFAULT_VIETNAM_IP);
+
+      if (token) params.set("token", token);
+      else params.delete("token");
+      if (username) params.set("username", username);
+      else params.delete("username");
+
+      if (pathname) {
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      } else {
+        console.warn(
+          "VideoPlayer: Pathname not available for URL update with IP."
+        );
+      }
+    }
+  }, [searchParams, token, username, router, pathname]);
 
   // Set up video source with token
   useEffect(() => {
@@ -40,11 +83,7 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
     }
   }, [token]);
 
-  const generateRandomIp = (): string => {
-    const octet = () => Math.floor(Math.random() * 256);
-    return `${octet()}.${octet()}.${octet()}.${octet()}`;
-  };
-
+  // Token validation effect
   useEffect(() => {
     if (!token) {
       setIsTokenValid(false);
@@ -55,37 +94,40 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
       return;
     }
 
-    let isActive = true;
-    const simulatedIpForThisSession = generateRandomIp();
+    // Ensure currentIp is initialized before running token check
+    if (!currentIp) {
+      // This should ideally not happen if the IP initialization effect runs correctly
+      console.warn("VideoPlayer: currentIp not set, delaying token check.");
+      return;
+    }
 
+    let isActive = true;
     const checkTokenValidity = async () => {
-      let videoPath = "/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+      const videoPath = "/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 
       const payloadForApi = {
         token: token,
         token_claim: "access-video",
         request_useragent: navigator.userAgent,
-        request_ip: simulatedIpForThisSession,
+        request_ip: currentIp, // Use the currentIp from state
         request_hostname: window.location.hostname,
         request_path: videoPath,
       };
 
       try {
         const result: TokenCheckResult = await checkToken(payloadForApi);
-
         if (!isActive) return;
 
-        setIsTokenValid(result.isValid);
-        setApiResponseMessage(result.message);
+                setIsTokenValid(result.isValid);
+                setApiResponseMessage(result.message);
 
         if (!result.isValid) {
           if (videoRef.current && !videoRef.current.paused) {
             videoRef.current.pause();
-            setIsPlaying(false); // Ensure playing state is updated
+            setIsPlaying(false);
           }
         }
       } catch (error) {
-        // This catch is for errors within this async function itself
         if (!isActive) return;
         console.error(
           "useEffect - Error calling checkToken or processing result:",
@@ -100,16 +142,15 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
       }
     };
 
-    checkTokenValidity(); // Initial check
-    const intervalId = setInterval(checkTokenValidity, 5000); // Increased interval
+    checkTokenValidity();
+    const intervalId = setInterval(checkTokenValidity, 2000);
 
     return () => {
       isActive = false;
       clearInterval(intervalId);
     };
-  }, [token, username]); // Added username to dependencies as it affects userMode which might be related
+  }, [token, currentIp]); // Re-run if token or currentIp (from URL) changes
 
-  // Video event handlers
   const handlePlay = async () => {
     if (videoRef.current && isTokenValid) {
       try {
@@ -122,7 +163,7 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
         }
       } catch (error) {
         console.error("Error toggling video playback:", error);
-        setIsPlaying(videoRef.current?.paused ? false : true); // Sync with actual state
+        setIsPlaying(videoRef.current?.paused ? false : true);
       }
     }
   };
@@ -140,47 +181,46 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
     }
   };
 
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-    }
-  };
+    const handleMute = () => {
+        if (videoRef.current) {
+            videoRef.current.muted = !isMuted;
+            setIsMuted(!isMuted);
+        }
+    };
 
-  const formatTime = (time: number) => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
-  };
+    const handleTimeUpdate = () => {
+        if (videoRef.current) {
+            setCurrentTime(videoRef.current.currentTime);
+        }
+    };
 
-  const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (videoRef.current && isTokenValid) {
-      const newTime = Number.parseFloat(e.target.value);
-      videoRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-    }
-  };
+    const handleLoadedMetadata = () => {
+        if (videoRef.current) {
+            setDuration(videoRef.current.duration);
+        }
+    };
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      {apiResponseMessage && (
-        <div className={`p-3 mb-2 rounded-md text-sm flex items-center`}>
-          <span>You are watching in location ... with IP: </span>
-        </div>
-      )}
+      {/* Informational message displaying the IP being used */}
+      <div
+        className={`p-3 mb-2 rounded-md text-sm flex items-center ${
+          isTokenValid
+            ? "bg-blue-900/30 text-blue-300"
+            : "bg-yellow-900/30 text-yellow-300"
+        }`}
+      >
+        <span>Validating with IP: {currentIp || "Loading IP..."}</span>
+      </div>
 
-      <Card className="w-full bg-gray-900 border-gray-800 overflow-hidden relative">
-        <CardContent className="p-0">
-          <div className="relative">
-            <video
-              ref={videoRef}
-              className="w-full aspect-video bg-black"
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-            />
+    const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (videoRef.current && isTokenValid) {
+            const newTime = Number.parseFloat(e.target.value);
+            videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime);
+        }
+    };
 
-            {/* Token invalid overlay (replaces "banned" overlay) */}
             {!isTokenValid && (
               <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
                 <div className="w-[80%] max-w-md bg-red-800/60 p-6 flex flex-col items-center justify-center rounded-lg text-center shadow-xl">
@@ -196,10 +236,8 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
                     Please ensure you have a valid session or contact support.
                   </p>
                 </div>
-              </div>
             )}
 
-            {/* User mode indicator */}
             <div className="absolute top-4 left-4 bg-gray-800/80 px-3 py-1 rounded-md text-sm z-[5]">
               <span
                 className={
@@ -213,7 +251,6 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
               )}
             </div>
 
-            {/* Video controls */}
             <div
               className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity duration-300 ${
                 !isTokenValid ? "opacity-50 pointer-events-none" : "opacity-100"
@@ -254,7 +291,6 @@ export function VideoPlayer({ token, username }: VideoPlayerProps) {
                     size="icon"
                     variant="ghost"
                     onClick={handleMute}
-                    disabled={!isTokenValid} // Mute can be independent or also disabled
                     className="text-white hover:bg-gray-800/50"
                     aria-label={isMuted ? "Unmute" : "Mute"}
                   >
